@@ -1,0 +1,62 @@
+name: magi_hair_off
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none'
+
+# The version of your project.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.1 <4.0.0'
+
+# 📦 Packages needed to run the app
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Appointment calendar package
+  table_calendar: ^3.0.9
+
+  url_launcher: ^6.3.1
+
+  # iOS-style icons package
+  cupertino_icons: ^1.0.2
+
+  font_awesome_flutter: ^10.7.0
+
+  shared_preferences: ^2.2.3
+
+  google_fonts: ^6.2.1
+
+
+
+
+  # 🔥 Firebase dependencies
+  firebase_core: ^4.1.0
+  firebase_auth: ^6.0.2
+  cloud_firestore: ^6.0.1
+
+# 🧪 Packages used only for development and testing
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Package for code analysis and best practices
+  flutter_lints: ^6.0.0
+
+# The following section is specific to Flutter.
+flutter:
+  # Enables the use of fonts and images from the Material Design asset set.
+  uses-material-design: true
+
+  assets:
+    - assets/img/
+
+  # To add custom fonts, create a "fonts" section like this:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic

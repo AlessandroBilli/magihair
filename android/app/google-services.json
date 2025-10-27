@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "120578827237",
+    "project_id": "magi-hair-off-app",
+    "storage_bucket": "magi-hair-off-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:120578827237:android:be5e2ca6ce4ed0582bc50c",
+        "android_client_info": {
+          "package_name": "com.magihair.magi_hair_off"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkUwioashsh3Eog2HoushoLkAdWz9Z498"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
