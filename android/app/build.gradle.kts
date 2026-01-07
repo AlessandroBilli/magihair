@@ -4,13 +4,19 @@ plugins {
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// 1. Carichiamo le chiavi dal file esterno per sicurezza
+val keystoreProperties = java.util.Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
 }
 
 android {
     namespace = "com.magihair.magi_hair_off"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35 // FORZATO A 35 PER GOOGLE PLAY
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,25 +29,49 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.magihair.magi_hair_off"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 35 // FORZATO A 35 (Richiesto da Google Play nel 2025)
+
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    // 2. Definiamo la configurazione di firma per la Release
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+            storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 3. ORA USA LA CHIAVE DI RILASCIO, NON QUELLA DI DEBUG
+            signingConfig = signingConfigs.getByName("release")
+
+            // Consigliato per lo store: riduce la dimensione e offusca il codice
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+// ==========================================================
+// FIX PER ERRORE DIPENDENZE ANDROID
+// ==========================================================
+configurations.all {
+    resolutionStrategy {
+        force("androidx.browser:browser:1.8.0")
+        force("androidx.core:core-ktx:1.15.0")
+        force("androidx.core:core:1.15.0")
+    }
 }

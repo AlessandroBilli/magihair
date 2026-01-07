@@ -1,4 +1,3 @@
-
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -22,18 +21,30 @@ class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
+        final primaryColor = Theme.of(context).primaryColor;
         return AlertDialog(
-          title: const Text('Annulla Prenotazione'),
-          content: Text('Sei sicuro di voler annullare la prenotazione per "${booking.treatment.name}" il ${DateFormat('dd/MM/yyyy HH:mm').format(booking.date)}?'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Annulla Prenotazione',
+            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'Sei sicuro di voler annullare la prenotazione per "${booking.treatment.name}" il ${DateFormat('dd/MM/yyyy HH:mm').format(booking.date)}?',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('No'),
+              child: Text('No', style: TextStyle(color: Colors.grey.shade600)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Sì, Annulla', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600, // Rosso più scuro per l'azione negativa
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Sì, Annulla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -63,99 +74,168 @@ class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    final textTheme = Theme.of(context).textTheme;
+
     if (currentUser == null) {
-      return const Center(child: Text('Accedi per vedere le tue prenotazioni.'));
+      return Scaffold(
+        backgroundColor: Colors.grey.shade50,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: primaryColor.withOpacity(0.6)),
+              const SizedBox(height: 16),
+              Text(
+                'Accedi per vedere le tue prenotazioni.',
+                textAlign: TextAlign.center,
+                style: textTheme.titleMedium?.copyWith(color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Effettua il login per visualizzare e gestire i tuoi appuntamenti futuri.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Le Tue Prenotazioni'),
-        automaticallyImplyLeading: false,
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('bookings')
-            .where('userId', isEqualTo: currentUser!.uid)
-            .where('date', isGreaterThanOrEqualTo: DateTime.now())
-            .orderBy('date', descending: false)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Errore: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.event_note, size: 80, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Nessuna prenotazione futura.',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
+      backgroundColor: Colors.grey.shade50, // Sfondo leggero
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: Text(
+              'Le Tue Prenotazioni',
+              style: textTheme.titleLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
-            );
-          }
-
-          // ✅ REVISIONE CRITICA QUI: Mappa correttamente i documenti
-          final bookings = snapshot.data!.docs.map((doc) {
-            // Assicurati che doc.data() sia effettivamente un Map<String, dynamic>
-            // Il `!` dopo doc.data() è sicuro perché abbiamo già controllato !snapshot.hasData
-            return Booking.fromJson(doc.data() as Map<String, dynamic>, doc.id);
-          }).toList();
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: bookings.length,
-            itemBuilder: (context, index) {
-              final booking = bookings[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 8.0),
-                elevation: 3,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              booking.treatment.name,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Con: ${booking.collaborator.name}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Quando: ${DateFormat('EEE d MMM yyyy HH:mm', 'it_IT').format(booking.date)}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
+            ),
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+            automaticallyImplyLeading: false,
+            floating: true,
+            pinned: true,
+            elevation: 8, // Un po' di ombra per l'app bar
+          ),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('bookings')
+                .where('userId', isEqualTo: currentUser!.uid)
+                .where('date', isGreaterThanOrEqualTo: DateTime.now())
+                .orderBy('date', descending: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator(color: primaryColor)),
+                );
+              }
+              if (snapshot.hasError) {
+                return SliverFillRemaining(
+                  child: Center(child: Text('Errore nel caricamento: ${snapshot.error}', style: textTheme.bodyLarge?.copyWith(color: Colors.red))),
+                );
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(FontAwesomeIcons.calendarCheck, size: 80, color: primaryColor.withOpacity(0.6)), // Icona più pertinente
+                        const SizedBox(height: 24),
+                        Text(
+                          'Nessuna prenotazione futura.',
+                          textAlign: TextAlign.center,
+                          style: textTheme.titleMedium?.copyWith(
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.cancel, color: Colors.red),
-                        tooltip: 'Annulla prenotazione',
-                        // ✅ Aggiunto controllo booking.id != null prima di passare a _confirmCancelBooking
-                        onPressed: booking.id != null ? () => _confirmCancelBooking(context, booking) : null,
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sembra che tu non abbia appuntamenti imminenti. Che ne dici di prenotarne uno ora?',
+                          textAlign: TextAlign.center,
+                          style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final bookings = snapshot.data!.docs.map((doc) {
+                return Booking.fromJson(doc.data() as Map<String, dynamic>, doc.id);
+              }).toList();
+
+              return SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0), // Padding generale maggiore
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                      final booking = bookings[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 10.0), // Margine verticale leggermente aumentato
+                        elevation: 4, // Ombra coerente con HomePage
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Bordi più arrotondati
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0), // Padding maggiore
+                          child: Row(
+                            children: [
+                              // Icona del servizio (opzionale, per abbellire)
+                              Icon(
+                                booking.treatment.type == ServiceType.capelli ? FontAwesomeIcons.cut :
+                                booking.treatment.type == ServiceType.unghie ? FontAwesomeIcons.handSparkles :
+                                Icons.star_outline, // Icona di fallback per Speciali
+                                color: primaryColor.withOpacity(0.8),
+                                size: 28,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      booking.treatment.name,
+                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Con: ${booking.collaborator.name}',
+                                      style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Quando: ${DateFormat('EEE d MMM yyyy HH:mm', 'it_IT').format(booking.date)}',
+                                      style: textTheme.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: primaryColor, // Colore viola per la data
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(FontAwesomeIcons.trashCan, color: Colors.red.shade600, size: 24), // Icona più moderna
+                                tooltip: 'Annulla prenotazione',
+                                onPressed: booking.id != null ? () => _confirmCancelBooking(context, booking) : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: bookings.length,
                   ),
                 ),
               );
             },
-          );
-        },
+          ),
+        ],
       ),
     );
   }
