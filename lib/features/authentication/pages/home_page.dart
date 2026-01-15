@@ -18,10 +18,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   ServiceType _selectedServiceType = ServiceType.capelli;
 
-  // LISTINO TRATTAMENTI AGGIORNATO: Le Combo sono ServiceType.combo per la visualizzazione
+  // LISTINO TRATTAMENTI
   static const List<Treatment> _allTreatments = [
     // --- Categoria: COMBO (ServiceType.combo) ---
-
     Treatment(name: 'Taglio + Messa in piega', price: 35.0, type: ServiceType.combo, durationInMinutes: 60),
     Treatment(name: 'Colore + Messa in piega', price: 42.0, type: ServiceType.combo, durationInMinutes: 90),
     Treatment(name: 'Colore + Taglio + Messa in piega', price: 62.0, type: ServiceType.combo, durationInMinutes: 120),
@@ -85,25 +84,19 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Mappa per definire il tipo di collaboratore richiesto da un ServiceType
-  // Questo risolve la logica di assegnazione che altrimenti ServiceType.combo avrebbe rotto.
   ServiceType _getBookingServiceType(ServiceType serviceType) {
     if (serviceType == ServiceType.combo) {
-      return ServiceType.capelli; // Le Combo sono gestite dai Parrucchieri
+      return ServiceType.capelli;
     }
     return serviceType;
   }
 
-  // Widget helper che crea un Treatment con il ServiceType corretto per la logica di booking
-  // pur mantenendo il Treatment originale per la UI.
   Treatment _prepareTreatmentForBooking(Treatment originalTreatment) {
     if (originalTreatment.type == ServiceType.combo) {
-      // Crea un Treatment *clone* che ha ServiceType.capelli,
-      // mantenendo tutte le altre proprietà originali.
       return Treatment(
         name: originalTreatment.name,
         price: originalTreatment.price,
-        type: ServiceType.capelli, // Override per la logica operatori!
+        type: ServiceType.capelli,
         durationInMinutes: originalTreatment.durationInMinutes,
       );
     }
@@ -142,7 +135,7 @@ class _HomePageState extends State<HomePage> {
                         label = 'Parrucchiera';
                         icon = FontAwesomeIcons.cut;
                         break;
-                      case ServiceType.combo: // Chip separato per le Combo
+                      case ServiceType.combo:
                         label = ' Combo';
                         icon = FontAwesomeIcons.tags;
                         break;
@@ -202,7 +195,6 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  // Logo del negozio
                   Align(
                     alignment: Alignment.center,
                     child: Padding(
@@ -225,7 +217,130 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // Sezione descrittiva e pulsante per i "Servizi su Chiamata"
+          // =======================================================
+          // 🟣 DISCLAIMER ONICOTECNICA (GIORGIA) - STILE VIOLA
+          // =======================================================
+          if (_selectedServiceType == ServiceType.unghie)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    // Sfondo Viola Chiarissimo (Opacità 10%)
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    // Bordo Viola Leggero (Opacità 30%)
+                    border: Border.all(color: primaryColor.withOpacity(0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_rounded, color: primaryColor, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              "Vuoi prenotare con Giorgia?",
+                              style: textTheme.titleMedium?.copyWith(
+                                color: primaryColor, // Testo viola pieno
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Attualmente le prenotazioni per Giorgia non sono disponibili tramite app. Ti invitiamo a chiamare in salone.",
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: primaryColor.withOpacity(0.8), // Testo viola scuro
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _makePhoneCall('+393888106944'),
+                          icon: const Icon(Icons.call, color: Colors.white, size: 18),
+                          label: const Text("Chiama per Giorgia"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor, // Pulsante viola pieno
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // =======================================================
+          // 🟣 DISCLAIMER PARRUCCHIERA (RAGAZZA) - STILE VIOLA
+          // =======================================================
+          if (_selectedServiceType == ServiceType.capelli)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    // Sfondo Viola Chiarissimo (Opacità 10%)
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    // Bordo Viola Leggero (Opacità 30%)
+                    border: Border.all(color: primaryColor.withOpacity(0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.people_alt_rounded, color: primaryColor, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Informazione Staff",
+                              style: textTheme.titleMedium?.copyWith(
+                                color: primaryColor, // Testo viola
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Se trovi l'operatore \"Ragazza\" durante la prenotazione, indica un membro dello staff presente in turno ma non specificato nominalmente.",
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: primaryColor.withOpacity(0.8), // Testo viola scuro
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Sezione descrittiva "Servizi su Chiamata"
           if (_selectedServiceType == ServiceType.Speciali)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
@@ -263,7 +378,7 @@ class _HomePageState extends State<HomePage> {
                           icon: const Icon(Icons.call, color: Colors.white),
                           label: const Text('Chiama per Informazioni', style: TextStyle(color: Colors.white, fontSize: 16)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade600,
+                            backgroundColor: Colors.green.shade600, // Verde per distinzione chiamata info
                             padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             elevation: 5,
@@ -276,7 +391,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // Sezione descrittiva per le combo (solo quando selezionate)
+          // Sezione descrittiva per le combo
           if (_selectedServiceType == ServiceType.combo)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -292,7 +407,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-
 
           // Lista dei servizi disponibili
           SliverPadding(
@@ -316,7 +430,6 @@ class _HomePageState extends State<HomePage> {
                     margin: const EdgeInsets.symmetric(vertical: 8.0),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      // Stile uniforme, rimosso il bordo aggiuntivo
                       side: BorderSide.none,
                     ),
                     elevation: 4,
@@ -362,10 +475,8 @@ class _HomePageState extends State<HomePage> {
                           // Pulsante "Prenota"
                           if (treatment.type != ServiceType.Speciali)
                             ElevatedButton.icon(
-                              // CHIAMATA ALLA FUNZIONE MODIFICATA PER GESTIRE LA COMBO
                               onPressed: () => widget.onNavigateToBooking(
                                 _allTreatments,
-                                // Passa il Treatment preparato con il ServiceType corretto per il booking
                                 _prepareTreatmentForBooking(treatment),
                                 'Prenota ${treatment.name}',
                               ),
