@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="magi_hair_off"
+        android:label="Magi Hair"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

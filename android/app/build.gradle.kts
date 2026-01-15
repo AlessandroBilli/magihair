@@ -54,8 +54,8 @@ android {
             signingConfig = signingConfigs.getByName("release")
 
             // Consigliato per lo store: riduce la dimensione e offusca il codice
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
