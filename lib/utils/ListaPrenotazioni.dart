@@ -1,4 +1,3 @@
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,6 +16,7 @@ class ListaPrenotazioni extends StatefulWidget {
 class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
+  // Funzione per confermare la cancellazione
   Future<void> _confirmCancelBooking(BuildContext context, Booking booking) async {
     final bool? confirm = await showDialog<bool>(
       context: context,
@@ -30,7 +30,6 @@ class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
           ),
           content: Text(
             'Sei sicuro di voler annullare la prenotazione per "${booking.treatment.name}" il ${DateFormat('dd/MM/yyyy HH:mm').format(booking.date)}?',
-            style: Theme.of(context).textTheme.bodyMedium,
           ),
           actions: <Widget>[
             TextButton(
@@ -40,32 +39,29 @@ class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade600, // Rosso più scuro per l'azione negativa
+                backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('Sì, Annulla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('Sì, Annulla'),
             ),
           ],
         );
       },
     );
 
-    if (confirm == true) {
+    if (confirm == true && booking.id != null) {
       try {
-        if (booking.id == null) {
-          throw Exception("ID della prenotazione non trovato per la cancellazione.");
-        }
         await AuthService().cancelBooking(booking.id!);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Prenotazione annullata con successo!'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('Prenotazione annullata!'), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Errore nell\'annullamento: ${e.toString()}'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Errore: ${e.toString()}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -77,159 +73,113 @@ class _ListaPrenotazioniState extends State<ListaPrenotazioni> {
     final primaryColor = Theme.of(context).primaryColor;
     final textTheme = Theme.of(context).textTheme;
 
+    // Se l'utente non è loggato
     if (currentUser == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_outline, size: 80, color: primaryColor.withOpacity(0.6)),
-              const SizedBox(height: 16),
-              Text(
-                'Accedi per vedere le tue prenotazioni.',
-                textAlign: TextAlign.center,
-                style: textTheme.titleMedium?.copyWith(color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Effettua il login per visualizzare e gestire i tuoi appuntamenti futuri.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade500),
-              ),
-            ],
-          ),
+          child: Text('Effettua il login per vedere le tue prenotazioni.'),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50, // Sfondo leggero
+      backgroundColor: Colors.grey.shade50,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            title: Text(
-              'Le Tue Prenotazioni',
-              style: textTheme.titleLarge?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            title: const Text('Le Tue Prenotazioni', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
             backgroundColor: primaryColor,
-            foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
             floating: true,
             pinned: true,
-            elevation: 8, // Un po' di ombra per l'app bar
+            elevation: 4,
           ),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('bookings')
                 .where('userId', isEqualTo: currentUser!.uid)
-                .where('date', isGreaterThanOrEqualTo: DateTime.now())
+                .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
                 .orderBy('date', descending: false)
                 .snapshots(),
             builder: (context, snapshot) {
+              // 1. Gestione caricamento
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: primaryColor)),
+                return const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
                 );
               }
+
+              // 2. Gestione errore
               if (snapshot.hasError) {
                 return SliverFillRemaining(
-                  child: Center(child: Text('Errore nel caricamento: ${snapshot.error}', style: textTheme.bodyLarge?.copyWith(color: Colors.red))),
+                  child: Center(child: Text('Errore: ${snapshot.error}')),
                 );
               }
+
+              // 3. Gestione lista vuota
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return SliverFillRemaining(
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(FontAwesomeIcons.calendarCheck, size: 80, color: primaryColor.withOpacity(0.6)), // Icona più pertinente
-                        const SizedBox(height: 24),
-                        Text(
-                          'Nessuna prenotazione futura.',
-                          textAlign: TextAlign.center,
-                          style: textTheme.titleMedium?.copyWith(
-                            color: Colors.grey.shade800,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sembra che tu non abbia appuntamenti imminenti. Che ne dici di prenotarne uno ora?',
-                          textAlign: TextAlign.center,
-                          style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
-                        ),
+                        Icon(FontAwesomeIcons.calendarCheck, size: 60, color: primaryColor.withOpacity(0.4)),
+                        const SizedBox(height: 16),
+                        const Text('Nessuna prenotazione trovata.'),
                       ],
                     ),
                   ),
                 );
               }
 
-              final bookings = snapshot.data!.docs.map((doc) {
-                return Booking.fromJson(doc.data() as Map<String, dynamic>, doc.id);
-              }).toList();
+              // 4. Se arriviamo qui, i dati ci sono!
+              final bookingsDocs = snapshot.data!.docs;
 
               return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0), // Padding generale maggiore
+                padding: const EdgeInsets.all(16.0),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                         (context, index) {
-                      final booking = bookings[index];
+                      final doc = bookingsDocs[index];
+                      final data = doc.data() as Map<String, dynamic>?;
+
+                      if (data == null) return const SizedBox.shrink();
+
+                      // Creiamo l'oggetto booking in modo sicuro
+                      final booking = Booking.fromJson(data, doc.id);
+
                       return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 10.0), // Margine verticale leggermente aumentato
-                        elevation: 4, // Ombra coerente con HomePage
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Bordi più arrotondati
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0), // Padding maggiore
-                          child: Row(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(12),
+                          leading: CircleAvatar(
+                            backgroundColor: primaryColor.withOpacity(0.1),
+                            child: Icon(FontAwesomeIcons.clock, color: primaryColor, size: 20),
+                          ),
+                          title: Text(
+                            booking.treatment.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Icona del servizio (opzionale, per abbellire)
-                              Icon(
-                                booking.treatment.type == ServiceType.capelli ? FontAwesomeIcons.cut :
-                                booking.treatment.type == ServiceType.unghie ? FontAwesomeIcons.handSparkles :
-                                Icons.star_outline, // Icona di fallback per Speciali
-                                color: primaryColor.withOpacity(0.8),
-                                size: 28,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      booking.treatment.name,
-                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'Con: ${booking.collaborator.name}',
-                                      style: textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Quando: ${DateFormat('EEE d MMM yyyy HH:mm', 'it_IT').format(booking.date)}',
-                                      style: textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: primaryColor, // Colore viola per la data
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(FontAwesomeIcons.trashCan, color: Colors.red.shade600, size: 24), // Icona più moderna
-                                tooltip: 'Annulla prenotazione',
-                                onPressed: booking.id != null ? () => _confirmCancelBooking(context, booking) : null,
+                              Text('Con: ${booking.collaborator.name}'),
+                              const SizedBox(height: 4),
+                              Text(
+                                DateFormat('EEE d MMM yyyy - HH:mm', 'it_IT').format(booking.date),
+                                style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
                               ),
                             ],
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(FontAwesomeIcons.trashCan, color: Colors.red),
+                            onPressed: () => _confirmCancelBooking(context, booking),
                           ),
                         ),
                       );
                     },
-                    childCount: bookings.length,
+                    childCount: bookingsDocs.length,
                   ),
                 ),
               );

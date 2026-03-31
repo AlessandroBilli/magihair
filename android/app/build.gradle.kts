@@ -1,27 +1,29 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// 1. Carichiamo le chiavi dal file esterno per sicurezza
-val keystoreProperties = java.util.Properties()
+// Caricamento sicuro di key.properties
+val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
     namespace = "com.magihair.magi_hair_off"
-    compileSdk = 35 // FORZATO A 35 PER GOOGLE PLAY
+    compileSdk = 36 // AGGIORNATO A 36 come richiesto dai plugin
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -30,30 +32,29 @@ android {
 
     defaultConfig {
         applicationId = "com.magihair.magi_hair_off"
-
         minSdk = flutter.minSdkVersion
-        targetSdk = 35 // FORZATO A 35 (Richiesto da Google Play nel 2025)
-
+        targetSdk = 35 // Questo può rimanere a 35 per ora
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    // 2. Definiamo la configurazione di firma per la Release
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
+            // Controllo di sicurezza per evitare il NullPointerException
+            if (keystoreProperties["keyAlias"] != null) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = keystoreProperties["storeFile"]?.let { file(it as String) }
+                storePassword = keystoreProperties["storePassword"] as String
+            } else {
+                println("⚠️ ATTENZIONE: key.properties non trovato o incompleto. La firma fallirà.")
+            }
         }
     }
 
     buildTypes {
         release {
-            // 3. ORA USA LA CHIAVE DI RILASCIO, NON QUELLA DI DEBUG
             signingConfig = signingConfigs.getByName("release")
-
-            // Consigliato per lo store: riduce la dimensione e offusca il codice
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -65,13 +66,15 @@ flutter {
     source = "../.."
 }
 
-// ==========================================================
-// FIX PER ERRORE DIPENDENZE ANDROID
-// ==========================================================
 configurations.all {
     resolutionStrategy {
         force("androidx.browser:browser:1.8.0")
         force("androidx.core:core-ktx:1.15.0")
         force("androidx.core:core:1.15.0")
+    }
+
+    dependencies {
+        // Questa è la libreria che risolve l'errore di flutter_local_notifications
+        coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
     }
 }

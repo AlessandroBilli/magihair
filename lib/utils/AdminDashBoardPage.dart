@@ -15,8 +15,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
 
   List<Collaborator> _allCollaborators = [];
   List<BusinessClosure> _allClosures = [];
-  List<Booking> _allBookings = []; // 🟢 NUOVO: Lista prenotazioni
+  List<Booking> _allBookings = [];
   bool _isLoading = true;
+
+  // Variabili per gestire l'ordinamento e il filtro
+  bool _sortAscending = true; // true = dalle più vecchie/vicine alle più lontane
+  bool _showOnicotecnica = false; // false = Tutti i servizi (eccetto unghie), true = Solo unghie
 
   final List<String> _validTimes = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30',
@@ -32,7 +36,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
   @override
   void initState() {
     super.initState();
-    // 🟢 MODIFICA: 3 Tab: Staff, Prenotazioni, Chiusure
     _tabController = TabController(length: 3, vsync: this);
     _loadAdminData();
   }
@@ -43,8 +46,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
       final cSnap = await FirebaseFirestore.instance.collection('collaborators').get();
       final clSnap = await FirebaseFirestore.instance.collection('business_closures').orderBy('date').get();
 
-      // 🟢 NUOVO: Caricamento prenotazioni (ordinate per data decrescente)
-      final bSnap = await FirebaseFirestore.instance.collection('bookings').orderBy('date', descending: true).get();
+      // 🟢 CORREZIONE: Diciamo a Firebase di estrarre solo le prenotazioni da OGGI in poi
+      final oggi = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      final bSnap = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(oggi))
+          .get();
 
       if (mounted) {
         setState(() {
@@ -58,10 +65,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
               reason: data['reason'] ?? '',
             );
           }).toList();
-          // Filtriamo chiusure vecchie per pulizia
           _allClosures = _allClosures.where((c) => c.date.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
 
-          // Mappatura prenotazioni
           _allBookings = bSnap.docs.map((d) => Booking.fromJson(d.data(), d.id)).toList();
 
           _isLoading = false;
@@ -85,7 +90,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     _loadAdminData();
   }
 
-  // 🟢 NUOVO: Cancellazione prenotazione
   Future<void> _deleteBooking(Booking booking) async {
     bool confirm = await showDialog(
         context: context,
@@ -185,9 +189,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     });
   }
 
-  // ============================================
-  // DIALOGHI (Chiusure e Staff)
-  // ============================================
   void _showClosureDialog() {
     bool isRange = false;
     DateTime? singleDate;
@@ -369,10 +370,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     );
   }
 
-  // ============================================
-  // TAB BUILDERS
-  // ============================================
-
   Widget _buildCollaboratorsTab() {
     final primaryColor = Theme.of(context).primaryColor;
     return ListView(
@@ -460,67 +457,149 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     );
   }
 
-  // 🟢 NUOVO: UI per la Tab Prenotazioni
+  // Costruzione della Tab Prenotazioni con ordinamento dinamico
   Widget _buildBookingsTab() {
-    if(_allBookings.isEmpty) {
-      return const Center(child: Text("Nessuna prenotazione trovata.", style: TextStyle(color: Colors.grey)));
-    }
+    final primaryColor = Theme.of(context).primaryColor;
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _allBookings.length,
-      itemBuilder: (context, index) {
-        final b = _allBookings[index];
-        final isFuture = b.date.isAfter(DateTime.now());
+    // 1. Applichiamo il filtro Generale vs Onicotecnica
+    List<Booking> filteredBookings = _allBookings.where((b) {
+      if (_showOnicotecnica) {
+        return b.treatment.type == ServiceType.unghie;
+      } else {
+        return b.treatment.type != ServiceType.unghie;
+      }
+    }).toList();
 
-        return Card(
-          elevation: isFuture ? 4 : 1, // Meno enfasi sulle passate
-          color: isFuture ? Colors.white : Colors.grey.shade100,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.calendar_month, color: isFuture ? Theme.of(context).primaryColor : Colors.grey),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        DateFormat('EEEE d MMMM yyyy - HH:mm', 'it_IT').format(b.date),
-                        style: TextStyle(fontWeight: FontWeight.bold, color: isFuture ? Colors.black : Colors.grey),
+    // 2. Applichiamo l'ordinamento (Crescente o Decrescente)
+    filteredBookings.sort((a, b) {
+      if (_sortAscending) {
+        return a.date.compareTo(b.date); // Ordine crescente (dalle vicine alle lontane)
+      } else {
+        return b.date.compareTo(a.date); // Ordine decrescente (dalle lontane alle vicine)
+      }
+    });
+
+    return Column(
+      children: [
+        // --- BARRA DEI FILTRI E ORDINAMENTO ---
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Parrucchiera'),
+                        selected: !_showOnicotecnica,
+                        onSelected: (selected) {
+                          if (selected) setState(() => _showOnicotecnica = false);
+                        },
+                        selectedColor: primaryColor.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          fontWeight: !_showOnicotecnica ? FontWeight.bold : FontWeight.normal,
+                          color: !_showOnicotecnica ? primaryColor : Colors.black87,
+                        ),
                       ),
-                    ),
-                    if(isFuture)
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteBooking(b),
-                      )
-                  ],
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Onicotecnica'),
+                        selected: _showOnicotecnica,
+                        onSelected: (selected) {
+                          if (selected) setState(() => _showOnicotecnica = true);
+                        },
+                        selectedColor: primaryColor.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          fontWeight: _showOnicotecnica ? FontWeight.bold : FontWeight.normal,
+                          color: _showOnicotecnica ? primaryColor : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const Divider(),
-                Row(
-                  children: [
-                    const Icon(Icons.person, size: 16, color: Colors.grey),
-                    const SizedBox(width: 5),
-                    Text(b.userName ?? "Cliente Sconosciuto", style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ],
+              ),
+              // Pulsante per cambiare ordine
+              IconButton(
+                icon: Icon(
+                  _sortAscending ? Icons.arrow_downward : Icons.arrow_upward,
+                  color: primaryColor,
                 ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    const Icon(Icons.cut, size: 16, color: Colors.grey),
-                    const SizedBox(width: 5),
-                    Text("${b.treatment.name} (con ${b.collaborator.name})"),
-                  ],
-                ),
-              ],
-            ),
+                tooltip: _sortAscending ? "Ordina: Più lontane prima" : "Ordina: Più vicine prima",
+                onPressed: () {
+                  setState(() {
+                    _sortAscending = !_sortAscending;
+                  });
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+
+        // --- LISTA PRENOTAZIONI ---
+        Expanded(
+          child: filteredBookings.isEmpty
+              ? const Center(child: Text("Nessuna prenotazione trovata.", style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: filteredBookings.length,
+            itemBuilder: (context, index) {
+              final b = filteredBookings[index];
+              final isFuture = b.date.isAfter(DateTime.now());
+
+              return Card(
+                elevation: isFuture ? 4 : 1, // Meno enfasi sulle passate
+                color: isFuture ? Colors.white : Colors.grey.shade100,
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_month, color: isFuture ? primaryColor : Colors.grey),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              DateFormat('EEEE d MMMM yyyy - HH:mm', 'it_IT').format(b.date),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: isFuture ? Colors.black : Colors.grey),
+                            ),
+                          ),
+                          if(isFuture)
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteBooking(b),
+                            )
+                        ],
+                      ),
+                      const Divider(),
+                      Row(
+                        children: [
+                          const Icon(Icons.person, size: 16, color: Colors.grey),
+                          const SizedBox(width: 5),
+                          Text(b.userName ?? "Cliente Sconosciuto", style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(Icons.cut, size: 16, color: Colors.grey),
+                          const SizedBox(width: 5),
+                          Text("${b.treatment.name} (con ${b.collaborator.name})"),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -552,7 +631,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
           unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(icon: Icon(Icons.people), text: "Staff"),
-            // 🟢 REINSERITO: Tab Prenotazioni
             Tab(icon: Icon(Icons.calendar_month), text: "Prenotazioni"),
             Tab(icon: Icon(Icons.event_busy), text: "Chiusure"),
           ],
@@ -563,7 +641,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
         controller: _tabController,
         children: [
           _buildCollaboratorsTab(),
-          _buildBookingsTab(), // 🟢 REINSERITO
+          _buildBookingsTab(),
           _buildClosuresTab(),
         ],
       ),

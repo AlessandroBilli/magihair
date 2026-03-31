@@ -21,7 +21,7 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isAdmin = false;
 
-  // 🟢 CORREZIONE: Variabili per gestire la chiusura degli stream
+  // Variabili per gestire la chiusura degli stream
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot>? _userDocSubscription;
 
@@ -65,7 +65,6 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  // 🟢 FONDAMENTALE: Questo metodo impedisce il buffering eterno
   @override
   void dispose() {
     _userDocSubscription?.cancel();

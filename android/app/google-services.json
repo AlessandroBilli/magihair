@@ -12,7 +12,28 @@
           "package_name": "com.magihair.magi_hair_off"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "120578827237-9ln3hukj402stv1u0sl8phkqq4do23a1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.magihair.magi_hair_off",
+            "certificate_hash": "d13a60b1faf6fc4fa5cab7542afe96bc1f9b9cbd"
+          }
+        },
+        {
+          "client_id": "120578827237-l1hvltadv6kv6gfq173e0r83i5m250np.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.magihair.magi_hair_off",
+            "certificate_hash": "f6d274e0cb72852a8464623d805c92caa62dc874"
+          }
+        },
+        {
+          "client_id": "120578827237-cng0r9h6v4559lb23aj2ctkgokoeh4en.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCkUwioashsh3Eog2HoushoLkAdWz9Z498"
@@ -20,7 +41,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "120578827237-cng0r9h6v4559lb23aj2ctkgokoeh4en.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "120578827237-ih7uudbbd6b9eb9mq2stso939du8gesi.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.magihair.magiHairOff"
+              }
+            }
+          ]
         }
       }
     }

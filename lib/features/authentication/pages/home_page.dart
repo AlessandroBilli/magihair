@@ -5,6 +5,9 @@ import '../../../utils/CreaPrenotazioni.dart';
 import '../../../core/models.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomePage extends StatefulWidget {
   final void Function(List<Treatment> allTreatments, Treatment initialTreatment, String pageTitle) onNavigateToBooking;
@@ -16,11 +19,89 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+
+  // =======================================================
+  // 🔔 LOGICA NOTIFICHE ADMIN (DIAGNOSTICA VISIBILE A SCHERMO)
+  // =======================================================
+  void setupNotificheAdmin() {
+    // Usiamo addPostFrameCallback per essere sicuri che la pagina sia caricata
+    // prima di mostrare eventuali messaggi a schermo.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        // 1. CHIEDIAMO SUBITO I PERMESSI, senza aspettare nient'altro
+        NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+
+        // 2. CONTROLLIAMO SE C'È UN UTENTE LOGGATO
+        User? user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          // Se non è loggato, non mostriamo nulla per non infastidire un cliente normale
+          return;
+        }
+
+        // 3. CONTROLLIAMO SE L'UTENTE È ADMIN NEL DB
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+
+        if (doc.exists && doc.data()?['isAdmin'] == true) {
+          // 4. SINTONIZZAZIONE
+          await FirebaseMessaging.instance.subscribeToTopic('admin_bookings');
+
+          // 🎉 MOSTRA IL SUCCESSO SULLO SCHERMO DEL TELEFONO
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("✅ Sistema Notifiche Admin Attivo!"),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          // L'utente è loggato ma non è admin. Nessuna notifica per lui.
+          print("Utente non admin, sintonizzazione saltata.");
+        }
+
+      } catch (e) {
+        // 🚨 SE C'È UN ERRORE, LO STAMPA SUL TELEFONO
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("❌ Errore Notifiche: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Avviamo il motore
+    setupNotificheAdmin();
+
+    // Mostra il popup in alto se l'app è aperta mentre qualcuno prenota
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("🔔 ${message.notification?.title ?? "Nuova prenotazione!"}\n${message.notification?.body ?? ""}"),
+            backgroundColor: Theme.of(context).primaryColor,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    });
+  }
+
+  // =======================================================
+  // ✂️ LISTINO TRATTAMENTI E LOGICA UI (CARROZZERIA INTONSA)
+  // =======================================================
   ServiceType _selectedServiceType = ServiceType.capelli;
 
-  // LISTINO TRATTAMENTI
   static const List<Treatment> _allTreatments = [
-    // --- Categoria: COMBO (ServiceType.combo) ---
     Treatment(name: 'Taglio + Messa in piega', price: 35.0, type: ServiceType.combo, durationInMinutes: 60),
     Treatment(name: 'Colore + Messa in piega', price: 42.0, type: ServiceType.combo, durationInMinutes: 90),
     Treatment(name: 'Colore + Taglio + Messa in piega', price: 62.0, type: ServiceType.combo, durationInMinutes: 120),
@@ -32,7 +113,6 @@ class _HomePageState extends State<HomePage> {
     Treatment(name: 'Balayage + Messa in piega', price: 95.0, type: ServiceType.combo, durationInMinutes: 210),
     Treatment(name: 'Messa in piega + ferri', price: 18.0, type: ServiceType.combo, durationInMinutes: 45),
 
-    // --- Categoria: PARRUCCHIERA (Servizi singoli - ServiceType.capelli) ---
     Treatment(name: 'Messa in piega (singola)', price: 15.0, type: ServiceType.capelli, durationInMinutes: 30),
     Treatment(name: 'Taglio', price: 10.0, type: ServiceType.capelli, durationInMinutes: 30),
     Treatment(name: 'Bagno di colore', price: 20.0, type: ServiceType.capelli, durationInMinutes: 45),
@@ -51,7 +131,6 @@ class _HomePageState extends State<HomePage> {
     Treatment(name: 'Trattamento extra', price: 20.0, type: ServiceType.capelli, durationInMinutes: 30),
     Treatment(name: 'Extra Applicazione', price: 3.0, type: ServiceType.capelli, durationInMinutes: 15),
 
-    // --- Categoria: ONICOTECNICA & ESTETICA (ServiceType.unghie) ---
     Treatment(name: 'Semipermanente', price: 22.0, type: ServiceType.unghie, durationInMinutes: 60),
     Treatment(name: 'Semipermanente rinforzato', price: 27.0, type: ServiceType.unghie, durationInMinutes: 75),
     Treatment(name: 'Manicure + smalto', price: 15.0, type: ServiceType.unghie, durationInMinutes: 45),
@@ -61,34 +140,18 @@ class _HomePageState extends State<HomePage> {
     Treatment(name: 'Ricostruzione ad unghia (Gel)', price: 4.0, type: ServiceType.unghie, durationInMinutes: 30),
     Treatment(name: 'Baffi + sopracciglia (Estetica)', price: 10.0, type: ServiceType.unghie, durationInMinutes: 30),
 
-    // --- Servizi Speciali ---
     Treatment(name: 'Solarium', price: 0, type: ServiceType.Speciali, durationInMinutes: 0),
+    Treatment(name: 'Estetista', price: 0, type: ServiceType.Speciali, durationInMinutes: 0),
     Treatment(name: 'Dermopigmentista', price: 0, type: ServiceType.Speciali, durationInMinutes: 0),
     Treatment(name: 'Lashmaker', price: 0, type: ServiceType.Speciali, durationInMinutes: 0),
     Treatment(name: 'Operatore Olistica', price: 0, type: ServiceType.Speciali, durationInMinutes: 0),
   ];
 
   Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri launchUri = Uri(
-      scheme: 'tel',
-      path: phoneNumber,
-    );
+    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
     if (await canLaunchUrl(launchUri)) {
       await launchUrl(launchUri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossibile effettuare la chiamata')),
-        );
-      }
     }
-  }
-
-  ServiceType _getBookingServiceType(ServiceType serviceType) {
-    if (serviceType == ServiceType.combo) {
-      return ServiceType.capelli;
-    }
-    return serviceType;
   }
 
   Treatment _prepareTreatmentForBooking(Treatment originalTreatment) {
@@ -204,7 +267,7 @@ class _HomePageState extends State<HomePage> {
                         height: 120,
                         width: 120,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => Icon(
+                        errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.cut,
                           size: 80,
                           color: Colors.white,
@@ -217,9 +280,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // =======================================================
-          // 🟣 DISCLAIMER ONICOTECNICA (GIORGIA) - STILE VIOLA
-          // =======================================================
           if (_selectedServiceType == ServiceType.unghie)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
@@ -227,10 +287,8 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    // Sfondo Viola Chiarissimo (Opacità 10%)
                     color: primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16),
-                    // Bordo Viola Leggero (Opacità 30%)
                     border: Border.all(color: primaryColor.withOpacity(0.3)),
                     boxShadow: [
                       BoxShadow(
@@ -250,7 +308,7 @@ class _HomePageState extends State<HomePage> {
                             child: Text(
                               "Vuoi prenotare con Giorgia?",
                               style: textTheme.titleMedium?.copyWith(
-                                color: primaryColor, // Testo viola pieno
+                                color: primaryColor,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -261,7 +319,7 @@ class _HomePageState extends State<HomePage> {
                       Text(
                         "Attualmente le prenotazioni per Giorgia non sono disponibili tramite app. Ti invitiamo a chiamare in salone.",
                         style: textTheme.bodyMedium?.copyWith(
-                          color: primaryColor.withOpacity(0.8), // Testo viola scuro
+                          color: primaryColor.withOpacity(0.8),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -272,7 +330,7 @@ class _HomePageState extends State<HomePage> {
                           icon: const Icon(Icons.call, color: Colors.white, size: 18),
                           label: const Text("Chiama per Giorgia"),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor, // Pulsante viola pieno
+                            backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
                             elevation: 2,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -285,9 +343,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // =======================================================
-          // 🟣 DISCLAIMER PARRUCCHIERA (RAGAZZA) - STILE VIOLA
-          // =======================================================
           if (_selectedServiceType == ServiceType.capelli)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
@@ -295,10 +350,8 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    // Sfondo Viola Chiarissimo (Opacità 10%)
                     color: primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16),
-                    // Bordo Viola Leggero (Opacità 30%)
                     border: Border.all(color: primaryColor.withOpacity(0.3)),
                     boxShadow: [
                       BoxShadow(
@@ -320,7 +373,7 @@ class _HomePageState extends State<HomePage> {
                             Text(
                               "Informazione Staff",
                               style: textTheme.titleMedium?.copyWith(
-                                color: primaryColor, // Testo viola
+                                color: primaryColor,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -328,7 +381,7 @@ class _HomePageState extends State<HomePage> {
                             Text(
                               "Se trovi l'operatore \"Ragazza\" durante la prenotazione, indica un membro dello staff presente in turno ma non specificato nominalmente.",
                               style: textTheme.bodyMedium?.copyWith(
-                                color: primaryColor.withOpacity(0.8), // Testo viola scuro
+                                color: primaryColor.withOpacity(0.8),
                               ),
                             ),
                           ],
@@ -340,7 +393,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // Sezione descrittiva "Servizi su Chiamata"
           if (_selectedServiceType == ServiceType.Speciali)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
@@ -378,7 +430,7 @@ class _HomePageState extends State<HomePage> {
                           icon: const Icon(Icons.call, color: Colors.white),
                           label: const Text('Chiama per Informazioni', style: TextStyle(color: Colors.white, fontSize: 16)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade600, // Verde per distinzione chiamata info
+                            backgroundColor: Colors.green.shade600,
                             padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             elevation: 5,
@@ -391,7 +443,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // Sezione descrittiva per le combo
           if (_selectedServiceType == ServiceType.combo)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -408,7 +459,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // Lista dei servizi disponibili
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             sliver: SliverList(
@@ -416,7 +466,6 @@ class _HomePageState extends State<HomePage> {
                     (context, index) {
                   final treatment = filteredTreatments[index];
 
-                  // Determina l'icona in base al tipo di servizio
                   IconData serviceIcon;
                   if (treatment.type == ServiceType.capelli || treatment.type == ServiceType.combo) {
                     serviceIcon = FontAwesomeIcons.cut;
@@ -471,8 +520,6 @@ class _HomePageState extends State<HomePage> {
                               ],
                             ),
                           ),
-
-                          // Pulsante "Prenota"
                           if (treatment.type != ServiceType.Speciali)
                             ElevatedButton.icon(
                               onPressed: () => widget.onNavigateToBooking(

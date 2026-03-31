@@ -38,27 +38,25 @@ class InfoPage extends StatelessWidget {
         backgroundColor: primaryColor,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: SingleChildScrollView( // 🟢 Permette lo scroll verticale se i contenuti sono troppi
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // --- Sezione HERO (Biglietto da Visita Digitale con LOGO) ---
+            // --- Sezione HERO ---
             Container(
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.05), // Sfondo leggero
+                color: primaryColor.withOpacity(0.05),
                 border: Border(bottom: BorderSide(color: primaryColor, width: 2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Sostituzione di Text("Magi Hair") con Image.asset
                   Image.asset(
-                    'assets/img/Logooffmagi.png', // <-- Percorso del logo
+                    'assets/img/Logooffmagi.png',
                     height: 60,
-                    color: primaryColor, // Applica la tinta viola al logo
+                    color: primaryColor,
                   ),
-
                   const SizedBox(height: 8.0),
                   Text(
                     "Il tuo momento Beauty & Wellness senza attese. Prenota subito, il tuo stile ti aspetta..",
@@ -67,9 +65,6 @@ class InfoPage extends StatelessWidget {
                       height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 16.0),
-
-
                 ],
               ),
             ),
@@ -80,7 +75,6 @@ class InfoPage extends StatelessWidget {
               child: _buildSectionTitle(context, "Contatti Utili"),
             ),
 
-            // Card contenitore per i contatti
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Card(
@@ -88,16 +82,14 @@ class InfoPage extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Column(
                   children: [
-                    // Indirizzo
                     _buildContactTile(
                       context,
                       icon: Icons.location_on,
                       title: "Dove Trovarci",
                       subtitle: "Via Reatina, 109, 00013 Mentana RM",
-                      onTap: () => _launchUrl('https://www.google.com/maps/dir//Via+Reatina,+109,+00013+Mentana+RM/@42.0572747,12.633104,15z/data=!4m8!4m7!1m0!1m5!1m1!1s0x132f703691d02323:0x703ca5cba971c014!2m2!1d12.6408971!2d42.0410016?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D'),
+                      onTap: () => _launchUrl('https://www.google.com/maps/search/?api=1&query=Via+Reatina+109+Mentana'),
                     ),
                     const Divider(height: 0, indent: 72, endIndent: 16),
-                    // Telefono
                     _buildContactTile(
                       context,
                       icon: Icons.phone_in_talk,
@@ -106,12 +98,10 @@ class InfoPage extends StatelessWidget {
                       onTap: () => _launchUrl('tel:+393888106944'),
                     ),
                     const Divider(height: 0, indent: 72, endIndent: 16),
-                    // Orari (usando la stringa multi-linea con gli orari reali)
                     _buildContactTile(
                       context,
                       icon: Icons.access_time_filled,
                       title: "Orari di Apertura:",
-
                       subtitle: """
 Lunedì: Chiuso
 Martedì: 09:00–13:00 / 15:30–19:00
@@ -128,7 +118,7 @@ Domenica: Chiuso
               ),
             ),
 
-            // --- Sezione Social ---
+            // --- Sezione Social (Fixata con Wrap) ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: _buildSectionTitle(context, "Seguici qui:"),
@@ -140,9 +130,11 @@ Domenica: Chiuso
                 elevation: 4,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  padding: const EdgeInsets.all(12.0), // Padding ridotto per ottimizzare
+                  child: Wrap( // 🟢 FIX: Wrap manda le icone a capo se lo spazio finisce
+                    alignment: WrapAlignment.spaceEvenly,
+                    spacing: 10, // Spazio orizzontale tra i pulsanti
+                    runSpacing: 15, // Spazio verticale se vanno a capo
                     children: [
                       _buildSocialButton(
                         context,
@@ -168,10 +160,7 @@ Domenica: Chiuso
                       _buildSocialButton(
                         context,
                         icon: FontAwesomeIcons.tiktok,
-                        // Nota: La costante del colore per il bianco (0xFFFFFFFF) è visibile
-                        // solo se l'icona è su uno sfondo non bianco. Su sfondo bianco,
-                        // l'icona TikTok risulterà invisibile.
-                        color: Colors.black, // Cambiato a nero per visibilità su sfondo bianco
+                        color: Colors.black,
                         label: 'Tiktok',
                         url: 'https://www.tiktok.com/@magihair.mentana',
                       ),
@@ -180,7 +169,6 @@ Domenica: Chiuso
                 ),
               ),
             ),
-
             const SizedBox(height: 40),
           ],
         ),
@@ -188,7 +176,6 @@ Domenica: Chiuso
     );
   }
 
-  // Widget helper per i contatti (interno alla Card)
   Widget _buildContactTile(BuildContext context, {required IconData icon, required String title, required String subtitle, VoidCallback? onTap}) {
     final primaryColor = Theme.of(context).primaryColor;
 
@@ -202,27 +189,31 @@ Domenica: Chiuso
         child: Icon(icon, color: primaryColor, size: 24),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      // 🟢 Fix per testi orario/indirizzo lunghi: permette di andare a capo senza errori
       subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade700)),
-      trailing: onTap != null
-          ? Icon(Icons.chevron_right, color: primaryColor)
-          : null,
+      trailing: onTap != null ? Icon(Icons.chevron_right, color: primaryColor) : null,
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
     );
   }
 
-  // Widget helper per i social (stile icona + testo)
   Widget _buildSocialButton(BuildContext context, {required IconData icon, required Color color, required String label, required String url}) {
     return InkWell(
       onTap: () => _launchUrl(url),
       borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
+      child: Container(
+        width: 75, // 🟢 Larghezza fissa per ogni tasto per un allineamento pulito nel Wrap
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(icon, size: 36.0, color: color),
+            FaIcon(icon, size: 32.0, color: color),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),

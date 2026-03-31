@@ -1,1 +1,39 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"magi-hair-off-app","appId":"1:120578827237:android:be5e2ca6ce4ed0582bc50c","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"magi-hair-off-app","configurations":{"android":"1:120578827237:android:be5e2ca6ce4ed0582bc50c","ios":"1:120578827237:ios:1864f7935c1a3ac82bc50c","macos":"1:120578827237:ios:1864f7935c1a3ac82bc50c","web":"1:120578827237:web:158bea3c6989fdc62bc50c","windows":"1:120578827237:web:8f635338a0f1cb7e2bc50c"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "magi-hair-off-app",
+          "appId": "1:120578827237:android:be5e2ca6ce4ed0582bc50c",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "magi-hair-off-app",
+          "configurations": {
+            "android": "1:120578827237:android:be5e2ca6ce4ed0582bc50c",
+            "ios": "1:120578827237:ios:1864f7935c1a3ac82bc50c",
+            "macos": "1:120578827237:ios:1864f7935c1a3ac82bc50c",
+            "web": "1:120578827237:web:158bea3c6989fdc62bc50c",
+            "windows": "1:120578827237:web:8f635338a0f1cb7e2bc50c"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

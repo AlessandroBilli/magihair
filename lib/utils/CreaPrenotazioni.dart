@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/models.dart';
 import 'BuisnessHours.dart';
-import 'dart:async'; // Necessario per StreamSubscription
+import 'dart:async';
+import 'package:audioplayers/audioplayers.dart'; // 🟢 Import aggiunto
 
 class CreaPrenotazioni extends StatefulWidget {
   final String pageTitle;
@@ -28,16 +29,11 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
 
   List<Booking> _todaysBookings = [];
   bool _isLoadingBookings = false;
-  // 🟢 NUOVO: Usiamo uno StreamSubscription per ascoltare in tempo reale
   StreamSubscription<QuerySnapshot>? _bookingsSubscription;
 
   List<Collaborator> _allCollaborators = [];
   bool _isLoadingCollaborators = true;
   List<DateTime> _closureDays = [];
-
-  final Map<int, String> _firestoreDayKeys = {
-    1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7',
-  };
 
   @override
   void initState() {
@@ -45,13 +41,11 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     _selectedDay = _focusedDay;
     _fetchCollaborators();
     _fetchBusinessClosures();
-    // Avviamo l'ascolto in tempo reale per oggi
     _listenToBookingsForDay(_focusedDay);
   }
 
   @override
   void dispose() {
-    // 🟢 NUOVO: Chiudiamo il canale quando usciamo dalla pagina per evitare sprechi
     _bookingsSubscription?.cancel();
     super.dispose();
   }
@@ -62,10 +56,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     }
     return treatmentType;
   }
-
-  // ===========================================
-  // CARICAMENTO DATI
-  // ===========================================
 
   Future<void> _fetchBusinessClosures() async {
     try {
@@ -101,11 +91,8 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     }
   }
 
-  // 🟢 NUOVO: Funzione che ascolta in TEMPO REALE (snapshots) invece di una volta sola (get)
   void _listenToBookingsForDay(DateTime day) {
     setState(() => _isLoadingBookings = true);
-
-    // Annulla l'ascolto precedente se cambiamo giorno
     _bookingsSubscription?.cancel();
 
     final startOfDay = DateTime(day.year, day.month, day.day);
@@ -115,7 +102,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
         .collection('bookings')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
         .where('date', isLessThan: Timestamp.fromDate(endOfDay))
-        .snapshots() // <--- Qui sta la magia: ascolta le modifiche
+        .snapshots()
         .listen(
           (snapshot) {
         if (mounted) {
@@ -125,8 +112,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
                 .toList();
             _isLoadingBookings = false;
           });
-          // Se il bottom sheet è aperto, forziamo un aggiornamento dell'interfaccia
-          // Nota: StatefulBuilder nel foglio modale gestirà il ricarico se lo stato cambia
         }
       },
       onError: (e) {
@@ -135,10 +120,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
       },
     );
   }
-
-  // ===========================================
-  // LOGICA SLOT ORARI E DISPONIBILITÀ
-  // ===========================================
 
   List<String> _generateTimeSlots(DateTime selectedDate, int treatmentDurationMinutes) {
     final List<String> potentialSlots = [];
@@ -156,17 +137,13 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
 
       while (currentMinute + treatmentDurationMinutes <= endMinute) {
         final slotTime = TimeOfDay(hour: currentMinute ~/ 60, minute: currentMinute % 60);
-
         final now = DateTime.now();
-        final slotDateTime = DateTime(
-            selectedDate.year, selectedDate.month, selectedDate.day,
-            slotTime.hour, slotTime.minute);
+        final slotDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, slotTime.hour, slotTime.minute);
 
         if (!isSameDay(selectedDate, now) || slotDateTime.isAfter(now.add(const Duration(minutes: 15)))) {
           final formattedTimeString = '${slotTime.hour.toString().padLeft(2, '0')}${slotTime.minute.toString().padLeft(2, '0')}';
           potentialSlots.add(formattedTimeString);
         }
-
         currentMinute += slotIntervalMinutes;
       }
     }
@@ -179,70 +156,44 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
 
     final int startHour = int.parse(timeHHmm.substring(0, 2));
     final int startMinute = int.parse(timeHHmm.substring(2, 4));
-
     final day = _selectedDay ?? DateTime.now();
     final newBookingStart = DateTime(day.year, day.month, day.day, startHour, startMinute);
     final newBookingEnd = newBookingStart.add(Duration(minutes: treatment.durationInMinutes));
 
-    // 1. Controllo Turni Settimanali
     final int weekday = newBookingStart.weekday;
     final List<String>? daySlots = collaborator.availability[weekday];
 
-    if (daySlots == null || daySlots.isEmpty) {
-      return false;
-    }
+    if (daySlots == null || daySlots.isEmpty) return false;
 
     DateTime checkTime = newBookingStart;
     while (checkTime.isBefore(newBookingEnd)) {
       final checkTimeString = '${checkTime.hour.toString().padLeft(2, '0')}${checkTime.minute.toString().padLeft(2, '0')}';
-      if (!daySlots.contains(checkTimeString)) {
-        return false;
-      }
+      if (!daySlots.contains(checkTimeString)) return false;
       checkTime = checkTime.add(const Duration(minutes: 30));
     }
 
-    // 2. Controllo Assenze Specifche
     if (collaborator.specificAbsences != null) {
       for (final absence in collaborator.specificAbsences!) {
         final absenceDate = DateTime(absence.date.year, absence.date.month, absence.date.day);
-
         if (isSameDay(absenceDate, newBookingStart)) {
           final startParts = absence.startTime.split(':');
           final endParts = absence.endTime.split(':');
-
           final absStart = DateTime(day.year, day.month, day.day, int.parse(startParts[0]), int.parse(startParts[1]));
           final absEnd = DateTime(day.year, day.month, day.day, int.parse(endParts[0]), int.parse(endParts[1]));
-
-          if (newBookingStart.isBefore(absEnd) && newBookingEnd.isAfter(absStart)) {
-            return false;
-          }
+          if (newBookingStart.isBefore(absEnd) && newBookingEnd.isAfter(absStart)) return false;
         }
       }
     }
 
-    // 3. Controllo Sovrapposizione Prenotazioni (CRITICO PER IL TUO PROBLEMA)
-    // Ora _todaysBookings è aggiornato in tempo reale grazie allo stream
     for (final existingBooking in _todaysBookings) {
-      // Controlliamo se la prenotazione appartiene allo stesso collaboratore
       if (existingBooking.collaborator.id == collaborator.id) {
-
         final existingStart = existingBooking.date;
         final existingEnd = existingStart.add(Duration(minutes: existingBooking.treatment.durationInMinutes));
-
-        // Logica di sovrapposizione:
-        // La nuova inizia PRIMA che la vecchia finisca E la nuova finisce DOPO che la vecchia inizi
-        if (newBookingStart.isBefore(existingEnd) && newBookingEnd.isAfter(existingStart)) {
-          return false; // OCCUPATO
-        }
+        if (newBookingStart.isBefore(existingEnd) && newBookingEnd.isAfter(existingStart)) return false;
       }
     }
-
-    return true; // LIBERO
+    return true;
   }
-
-  // ===========================================
-  // UI & INTERAZIONE
-  // ===========================================
 
   bool _isDayClosed(DateTime day) {
     final normalizedDay = DateTime(day.year, day.month, day.day);
@@ -258,15 +209,11 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
       );
       return;
     }
-
     setState(() {
       _selectedDay = selectedDay;
       _focusedDay = focusedDay;
     });
-
-    // 🟢 NUOVO: Aggiorna lo stream sul nuovo giorno selezionato
     _listenToBookingsForDay(selectedDay);
-
     if (mounted) _showBookingSheet(selectedDay);
   }
 
@@ -282,6 +229,9 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     Collaborator? selectedCollaboratorInSheet;
     final primaryColor = Theme.of(context).primaryColor;
 
+    // 🟢 Inizializziamo il player audio
+    final AudioPlayer player = AudioPlayer();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -289,7 +239,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
       builder: (context) {
         return StatefulBuilder(
           builder: (sheetContext, sheetSetState) {
-
             List<String> generatedTimeSlots = [];
             if (selectedTreatmentInSheet != null) {
               generatedTimeSlots = _generateTimeSlots(day, selectedTreatmentInSheet!.durationInMinutes);
@@ -299,8 +248,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
             if (selectedTreatmentInSheet != null) {
               final requiredType = _getRequiredCollaboratorType(selectedTreatmentInSheet!.type);
               filteredCollaborators = _allCollaborators.where((c) {
-                final typesMatch = c.assignedServiceTypes.any((t) => t == requiredType);
-                return typesMatch;
+                return c.assignedServiceTypes.any((t) => t == requiredType);
               }).toList();
             }
 
@@ -313,127 +261,133 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
                 bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
                 top: 24, left: 24, right: 24,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
-                  const SizedBox(height: 20),
-                  Text('Prenota per il ${DateFormat('dd/MM/yyyy').format(day)}',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: primaryColor, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 20),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+                    const SizedBox(height: 20),
+                    Text('Prenota per il ${DateFormat('dd/MM/yyyy').format(day)}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(color: primaryColor, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
 
-                  // SELEZIONE TRATTAMENTO
-                  DropdownButtonFormField<Treatment>(
-                    value: selectedTreatmentInSheet,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Trattamento',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    DropdownButtonFormField<Treatment>(
+                      value: selectedTreatmentInSheet,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Trattamento',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      items: widget.treatments.map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text("${t.name} (${t.durationInMinutes} min)", overflow: TextOverflow.ellipsis),
+                      )).toList(),
+                      onChanged: (val) {
+                        sheetSetState(() {
+                          selectedTreatmentInSheet = val;
+                          selectedTimeInSheet = null;
+                          selectedCollaboratorInSheet = null;
+                        });
+                      },
                     ),
-                    items: widget.treatments.map((t) => DropdownMenuItem(
-                      value: t,
-                      child: Text("${t.name} (${t.durationInMinutes} min)", overflow: TextOverflow.ellipsis),
-                    )).toList(),
-                    onChanged: (val) {
-                      sheetSetState(() {
-                        selectedTreatmentInSheet = val;
-                        selectedTimeInSheet = null;
-                        selectedCollaboratorInSheet = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  // SELEZIONE ORARIO
-                  if (selectedTreatmentInSheet != null) ...[
-                    Text("Scegli Orario", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-                    const SizedBox(height: 10),
-                    generatedTimeSlots.isEmpty
-                        ? const Text("Nessun orario disponibile.", style: TextStyle(color: Colors.red))
-                        : Wrap(
-                      spacing: 8, runSpacing: 8,
-                      children: generatedTimeSlots.map((time) {
-                        return ChoiceChip(
-                          label: Text("${time.substring(0,2)}:${time.substring(2,4)}"),
-                          selected: selectedTimeInSheet == time,
-                          onSelected: (sel) {
-                            sheetSetState(() {
-                              selectedTimeInSheet = sel ? time : null;
-                              selectedCollaboratorInSheet = null;
-                            });
-                          },
-                          selectedColor: primaryColor,
-                          labelStyle: TextStyle(color: selectedTimeInSheet == time ? Colors.white : Colors.black),
+                    if (selectedTreatmentInSheet != null) ...[
+                      Text("Scegli Orario", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                      const SizedBox(height: 10),
+                      generatedTimeSlots.isEmpty
+                          ? const Text("Nessun orario disponibile.", style: TextStyle(color: Colors.red))
+                          : Wrap(
+                        spacing: 8, runSpacing: 8,
+                        children: generatedTimeSlots.map((time) {
+                          return ChoiceChip(
+                            label: Text("${time.substring(0,2)}:${time.substring(2,4)}"),
+                            selected: selectedTimeInSheet == time,
+                            onSelected: (sel) {
+                              sheetSetState(() {
+                                selectedTimeInSheet = sel ? time : null;
+                                selectedCollaboratorInSheet = null;
+                              });
+                            },
+                            selectedColor: primaryColor,
+                            labelStyle: TextStyle(color: selectedTimeInSheet == time ? Colors.white : Colors.black),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    if (selectedTimeInSheet != null && selectedTreatmentInSheet != null) ...[
+                      Text("Scegli Professionista", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                      const SizedBox(height: 10),
+                      filteredCollaborators.isEmpty
+                          ? const Text("Nessuno staff disponibile per questo servizio.", style: TextStyle(color: Colors.red))
+                          : Wrap(
+                        spacing: 8, runSpacing: 8,
+                        children: filteredCollaborators.map((c) {
+                          final isAvailable = isCollaboratorAvailable(c, selectedTimeInSheet!, selectedTreatmentInSheet);
+                          return ChoiceChip(
+                            label: Text(c.name),
+                            selected: selectedCollaboratorInSheet?.id == c.id,
+                            selectedColor: primaryColor,
+                            backgroundColor: isAvailable ? null : Colors.grey.shade200,
+                            labelStyle: TextStyle(
+                                color: selectedCollaboratorInSheet?.id == c.id ? Colors.white : (isAvailable ? Colors.black : Colors.grey),
+                                decoration: isAvailable ? null : TextDecoration.lineThrough
+                            ),
+                            onSelected: isAvailable ? (sel) {
+                              sheetSetState(() => selectedCollaboratorInSheet = sel ? c : null);
+                            } : null,
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 30),
+                    ],
+
+                    ElevatedButton(
+                      onPressed: isButtonActive ? () async { // 🟢 Aggiunto async
+                        final startH = int.parse(selectedTimeInSheet!.substring(0,2));
+                        final startM = int.parse(selectedTimeInSheet!.substring(2,4));
+
+                        final newBooking = Booking(
+                          treatment: selectedTreatmentInSheet!,
+                          date: DateTime(day.year, day.month, day.day, startH, startM),
+                          time: selectedTimeInSheet!,
+                          collaborator: selectedCollaboratorInSheet!,
+                          userId: '',
+                          userName: '',
                         );
-                      }).toList(),
+
+                        // 🟢 LOGICA AUDIO: Suoniamo il file prima di chiudere
+                        try {
+                          await player.play(AssetSource('audio/notification.mp3'));
+                        } catch (e) {
+                          print("Errore riproduzione audio: $e");
+                        }
+
+                        Navigator.pop(sheetContext, newBooking);
+                      } : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text("Conferma Prenotazione", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(height: 20),
                   ],
-
-                  // SELEZIONE COLLABORATORE
-                  if (selectedTimeInSheet != null && selectedTreatmentInSheet != null) ...[
-                    Text("Scegli Professionista", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-                    const SizedBox(height: 10),
-                    filteredCollaborators.isEmpty
-                        ? const Text("Nessuno staff disponibile per questo servizio.", style: TextStyle(color: Colors.red))
-                        : Wrap(
-                      spacing: 8, runSpacing: 8,
-                      children: filteredCollaborators.map((c) {
-                        // Qui chiama la funzione che controlla lo Stream aggiornato
-                        final isAvailable = isCollaboratorAvailable(c, selectedTimeInSheet!, selectedTreatmentInSheet);
-
-                        return ChoiceChip(
-                          label: Text(c.name),
-                          selected: selectedCollaboratorInSheet?.id == c.id,
-                          selectedColor: primaryColor,
-                          backgroundColor: isAvailable ? null : Colors.grey.shade200,
-                          labelStyle: TextStyle(
-                              color: selectedCollaboratorInSheet?.id == c.id ? Colors.white : (isAvailable ? Colors.black : Colors.grey),
-                              decoration: isAvailable ? null : TextDecoration.lineThrough
-                          ),
-                          onSelected: isAvailable ? (sel) {
-                            sheetSetState(() => selectedCollaboratorInSheet = sel ? c : null);
-                          } : null,
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 30),
-                  ],
-
-                  // BOTTONE CONFERMA
-                  ElevatedButton(
-                    onPressed: isButtonActive ? () {
-                      final startH = int.parse(selectedTimeInSheet!.substring(0,2));
-                      final startM = int.parse(selectedTimeInSheet!.substring(2,4));
-
-                      final newBooking = Booking(
-                        treatment: selectedTreatmentInSheet!,
-                        date: DateTime(day.year, day.month, day.day, startH, startM),
-                        time: selectedTimeInSheet!,
-                        collaborator: selectedCollaboratorInSheet!,
-                        userId: '',
-                        userName: '',
-                      );
-                      Navigator.pop(sheetContext, newBooking);
-                    } : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text("Conferma Prenotazione", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                ),
               ),
             );
           },
         );
       },
     ).then((result) {
+      // 🟢 Chiudiamo il player per liberare risorse
+      player.dispose();
       if (result != null && result is Booking) {
         Navigator.pop(context, result);
       }
@@ -445,9 +399,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     if (_isLoadingCollaborators) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
     final primaryColor = Theme.of(context).primaryColor;
-
     return Scaffold(
       appBar: AppBar(title: Text(widget.pageTitle), backgroundColor: primaryColor, foregroundColor: Colors.white),
       body: Column(
@@ -467,9 +419,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
             headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
             enabledDayPredicate: (day) {
               final normalizedDay = DateTime(day.year, day.month, day.day);
-              if (normalizedDay.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day))) {
-                return false;
-              }
+              if (normalizedDay.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day))) return false;
               if (_isDayClosed(normalizedDay)) return false;
               return true;
             },
