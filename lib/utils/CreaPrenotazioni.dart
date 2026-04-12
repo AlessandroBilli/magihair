@@ -5,18 +5,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/models.dart';
 import 'BuisnessHours.dart';
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart'; // 🟢 Import aggiunto
+import 'package:audioplayers/audioplayers.dart';
 
 class CreaPrenotazioni extends StatefulWidget {
   final String pageTitle;
   final List<Treatment> treatments;
   final Treatment? initialTreatment;
+  final bool isAdmin; // 🟢 NUOVO PARAMETRO
 
   const CreaPrenotazioni({
     super.key,
     required this.pageTitle,
     required this.treatments,
     this.initialTreatment,
+    this.isAdmin = false, // 🟢 DEFAULT
   });
 
   @override
@@ -35,6 +37,8 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
   bool _isLoadingCollaborators = true;
   List<DateTime> _closureDays = [];
 
+  final TextEditingController _nomeClienteController = TextEditingController(); // 🟢 CONTROLLER
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +51,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
   @override
   void dispose() {
     _bookingsSubscription?.cancel();
+    _nomeClienteController.dispose();
     super.dispose();
   }
 
@@ -69,7 +74,7 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
         });
       }
     } catch (e) {
-      print("Errore caricamento chiusure: $e");
+      print("Errore chiusure: $e");
     }
   }
 
@@ -86,7 +91,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
         });
       }
     } catch (e) {
-      print("Errore caricamento collaboratori: $e");
       if (mounted) setState(() => _isLoadingCollaborators = false);
     }
   }
@@ -113,10 +117,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
             _isLoadingBookings = false;
           });
         }
-      },
-      onError: (e) {
-        print("Errore stream bookings: $e");
-        if (mounted) setState(() => _isLoadingBookings = false);
       },
     );
   }
@@ -228,8 +228,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
     String? selectedTimeInSheet;
     Collaborator? selectedCollaboratorInSheet;
     final primaryColor = Theme.of(context).primaryColor;
-
-    // 🟢 Inizializziamo il player audio
     final AudioPlayer player = AudioPlayer();
 
     showModalBottomSheet(
@@ -343,11 +341,28 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
                           );
                         }).toList(),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // 🟢 SOLO SE È ADMIN MOSTRIAMO IL CAMPO PER IL NOME
+                    if (widget.isAdmin) ...[
+                      Text("Prenota per conto di: (Opzionale)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _nomeClienteController,
+                        decoration: InputDecoration(
+                          hintText: "Nome e cognome cliente",
+                          prefixIcon: const Icon(Icons.person),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                     ],
 
                     ElevatedButton(
-                      onPressed: isButtonActive ? () async { // 🟢 Aggiunto async
+                      onPressed: isButtonActive ? () async {
                         final startH = int.parse(selectedTimeInSheet!.substring(0,2));
                         final startM = int.parse(selectedTimeInSheet!.substring(2,4));
 
@@ -357,15 +372,13 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
                           time: selectedTimeInSheet!,
                           collaborator: selectedCollaboratorInSheet!,
                           userId: '',
-                          userName: '',
+                          // 🟢 SE ADMIN HA SCRITTO QUALCOSA, INVIAMO QUEL NOME
+                          userName: widget.isAdmin && _nomeClienteController.text.isNotEmpty
+                              ? _nomeClienteController.text
+                              : '',
                         );
 
-                        // 🟢 LOGICA AUDIO: Suoniamo il file prima di chiudere
-                        try {
-                          await player.play(AssetSource('audio/notification.mp3'));
-                        } catch (e) {
-                          print("Errore riproduzione audio: $e");
-                        }
+                        try { await player.play(AssetSource('audio/notification.mp3')); } catch (e) {}
 
                         Navigator.pop(sheetContext, newBooking);
                       } : null,
@@ -386,7 +399,6 @@ class _CreaPrenotazioniState extends State<CreaPrenotazioni> {
         );
       },
     ).then((result) {
-      // 🟢 Chiudiamo il player per liberare risorse
       player.dispose();
       if (result != null && result is Booking) {
         Navigator.pop(context, result);

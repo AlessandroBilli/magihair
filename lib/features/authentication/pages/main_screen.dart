@@ -33,7 +33,6 @@ class _MainScreenState extends State<MainScreen> {
 
   void _setupAuthListener() {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-      // Puliamo sempre il vecchio listener del documento utente
       _userDocSubscription?.cancel();
       _userDocSubscription = null;
 
@@ -52,7 +51,7 @@ class _MainScreenState extends State<MainScreen> {
             });
           }
         }, onError: (e) {
-          print("Errore stream MainScreen (ignorabile se eliminato): $e");
+          print("Errore stream MainScreen: $e");
         });
       } else {
         if (mounted) {
@@ -72,6 +71,7 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
+  // 🟢 LOGICA AGGIORNATA: Gestione Eccezione Admin vs Utente Normale
   Future<void> _creaNuovaPrenotazione(
       List<Treatment> treatments,
       Treatment? initialTreatment,
@@ -84,34 +84,48 @@ class _MainScreenState extends State<MainScreen> {
               pageTitle: pageTitle,
               treatments: treatments,
               initialTreatment: initialTreatment,
+              isAdmin: _isAdmin, // Passiamo il parametro per abilitare il campo nome
             )));
 
     final currentUser = FirebaseAuth.instance.currentUser;
     if (bookingDetails != null && currentUser != null) {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
-        String userName = 'Sconosciuto';
-        if (userDoc.exists && userDoc.data() != null) {
-          final userData = userDoc.data()! as Map<String, dynamic>;
-          userName = userData['name'] ?? 'Sconosciuto';
+        // 1. Verifichiamo se l'admin ha inserito un nome manualmente (ECCEZIONE)
+        final bool isEccezioneAdmin = bookingDetails.userName != null && bookingDetails.userName!.trim().isNotEmpty;
+
+        String nomeDaSalvare = 'Sconosciuto';
+
+        if (isEccezioneAdmin) {
+          // Se è un'eccezione, usiamo il nome scritto a mano
+          nomeDaSalvare = bookingDetails.userName!.trim();
+        } else {
+          // Se è normale (o admin per sé), recuperiamo il nome reale dal DB
+          final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+          if (userDoc.exists && userDoc.data() != null) {
+            final userData = userDoc.data()! as Map<String, dynamic>;
+            nomeDaSalvare = userData['name'] ?? userData['nome'] ?? 'Cliente';
+          }
         }
 
         final bookingToSave = Booking(
-          userId: currentUser.uid,
+          // LOGICA ID: Se eccezione usiamo ID fittizio, altrimenti UID reale dell'account
+          userId: isEccezioneAdmin ? 'prenotazione_terzi' : currentUser.uid,
           treatment: bookingDetails.treatment,
           date: bookingDetails.date,
           time: bookingDetails.time,
           collaborator: bookingDetails.collaborator,
-          userName: userName,
+          userName: nomeDaSalvare,
         );
+
         await FirebaseFirestore.instance.collection('bookings').add(bookingToSave.toJson());
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Prenotazione creata con successo!'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('✅ Prenotazione registrata!'), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
-        print("Errore salvataggio prenotazione: $e");
+        print("Errore salvataggio: $e");
       }
     }
   }
@@ -124,6 +138,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Liste base
     final List<Widget> pages = [
       const InfoPage(),
       HomePage(
@@ -141,6 +156,7 @@ class _MainScreenState extends State<MainScreen> {
       const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profilo'),
     ];
 
+    // Inserimento dinamico della scheda Admin se l'utente ha i permessi
     if (_isAdmin) {
       pages.insert(3, const AdminDashboardPage());
       navBarItems.insert(3, const BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings), label: 'Admin'));
@@ -149,7 +165,7 @@ class _MainScreenState extends State<MainScreen> {
     if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
     return Scaffold(
-      body: Center(child: pages.elementAt(_selectedIndex)),
+      body: pages.elementAt(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         items: navBarItems,
         currentIndex: _selectedIndex,

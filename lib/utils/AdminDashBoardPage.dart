@@ -15,12 +15,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
 
   List<Collaborator> _allCollaborators = [];
   List<BusinessClosure> _allClosures = [];
-  List<Booking> _allBookings = [];
   bool _isLoading = true;
 
-  // Variabili per gestire l'ordinamento e il filtro
-  bool _sortAscending = true; // true = dalle più vecchie/vicine alle più lontane
-  bool _showOnicotecnica = false; // false = Tutti i servizi (eccetto unghie), true = Solo unghie
+  bool _sortAscending = true;
+  bool _showOnicotecnica = false;
 
   final List<String> _validTimes = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30',
@@ -37,26 +35,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadAdminData();
+    _loadStaticAdminData(); // Ora carica solo staff e chiusure qui
   }
 
-  Future<void> _loadAdminData() async {
+  // 🟢 Carica solo dati che non cambiano ogni secondo
+  Future<void> _loadStaticAdminData() async {
     setState(() => _isLoading = true);
     try {
       final cSnap = await FirebaseFirestore.instance.collection('collaborators').get();
       final clSnap = await FirebaseFirestore.instance.collection('business_closures').orderBy('date').get();
 
-      // 🟢 CORREZIONE: Diciamo a Firebase di estrarre solo le prenotazioni da OGGI in poi
-      final oggi = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-      final bSnap = await FirebaseFirestore.instance
-          .collection('bookings')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(oggi))
-          .get();
-
       if (mounted) {
         setState(() {
           _allCollaborators = cSnap.docs.map((d) => Collaborator.fromJson({...d.data(), 'id': d.id})).toList();
-
           _allClosures = clSnap.docs.map((d) {
             final data = d.data();
             return BusinessClosure(
@@ -66,36 +57,30 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
             );
           }).toList();
           _allClosures = _allClosures.where((c) => c.date.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
-
-          _allBookings = bSnap.docs.map((d) => Booking.fromJson(d.data(), d.id)).toList();
-
           _isLoading = false;
         });
       }
     } catch (e) {
-      print("Errore caricamento admin: $e");
       if(mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _toggleCollaboratorStatus(Collaborator c, bool newStatus) async {
-    await FirebaseFirestore.instance.collection('collaborators').doc(c.id).update({
-      'isDisabled': newStatus
-    });
-    _loadAdminData();
+    await FirebaseFirestore.instance.collection('collaborators').doc(c.id).update({'isDisabled': newStatus});
+    _loadStaticAdminData();
   }
 
   Future<void> _deleteClosure(String id) async {
     await FirebaseFirestore.instance.collection('business_closures').doc(id).delete();
-    _loadAdminData();
+    _loadStaticAdminData();
   }
 
-  Future<void> _deleteBooking(Booking booking) async {
+  Future<void> _deleteBooking(String bookingId, String userName) async {
     bool confirm = await showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text("Cancella Prenotazione"),
-          content: Text("Vuoi cancellare la prenotazione di ${booking.userName}?"),
+          content: Text("Vuoi cancellare la prenotazione di $userName?"),
           actions: [
             TextButton(onPressed: ()=>Navigator.pop(ctx, false), child: const Text("No")),
             ElevatedButton(
@@ -107,10 +92,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
         )
     ) ?? false;
 
-    if(confirm && booking.id != null) {
-      await FirebaseFirestore.instance.collection('bookings').doc(booking.id).delete();
-      _loadAdminData();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Prenotazione cancellata.")));
+    if(confirm) {
+      await FirebaseFirestore.instance.collection('bookings').doc(bookingId).delete();
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Prenotazione cancellata.")));
     }
   }
 
@@ -180,7 +164,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                 }
               }
               await FirebaseFirestore.instance.collection('collaborators').doc(collaborator.id).update({'availability': newAvailability});
-              _loadAdminData();
+              _loadStaticAdminData();
               Navigator.pop(context);
             }, child: const Text("Salva"))
           ],
@@ -293,7 +277,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                     }
 
                     await batch.commit();
-                    _loadAdminData();
+                    _loadStaticAdminData();
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chiusura salvata!")));
                   },
@@ -356,7 +340,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                             } else {
                               await FirebaseFirestore.instance.collection('collaborators').doc(collaboratorToEdit.id).update(data);
                             }
-                            _loadAdminData();
+                            _loadStaticAdminData();
                             Navigator.pop(context);
                           }
                         },
@@ -457,31 +441,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     );
   }
 
-  // Costruzione della Tab Prenotazioni con ordinamento dinamico
+  // 🟢 IL MOTORE IN TEMPO REALE CHE RISOLVE IL TUO BUG
   Widget _buildBookingsTab() {
     final primaryColor = Theme.of(context).primaryColor;
-
-    // 1. Applichiamo il filtro Generale vs Onicotecnica
-    List<Booking> filteredBookings = _allBookings.where((b) {
-      if (_showOnicotecnica) {
-        return b.treatment.type == ServiceType.unghie;
-      } else {
-        return b.treatment.type != ServiceType.unghie;
-      }
-    }).toList();
-
-    // 2. Applichiamo l'ordinamento (Crescente o Decrescente)
-    filteredBookings.sort((a, b) {
-      if (_sortAscending) {
-        return a.date.compareTo(b.date); // Ordine crescente (dalle vicine alle lontane)
-      } else {
-        return b.date.compareTo(a.date); // Ordine decrescente (dalle lontane alle vicine)
-      }
-    });
+    final oggi = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return Column(
       children: [
-        // --- BARRA DEI FILTRI E ORDINAMENTO ---
+        // --- I TUOI FILTRI E ORDINAMENTO (INTATTI) ---
         Container(
           color: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -521,80 +488,108 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                   ),
                 ),
               ),
-              // Pulsante per cambiare ordine
               IconButton(
-                icon: Icon(
-                  _sortAscending ? Icons.arrow_downward : Icons.arrow_upward,
-                  color: primaryColor,
-                ),
-                tooltip: _sortAscending ? "Ordina: Più lontane prima" : "Ordina: Più vicine prima",
-                onPressed: () {
-                  setState(() {
-                    _sortAscending = !_sortAscending;
-                  });
-                },
+                icon: Icon(_sortAscending ? Icons.arrow_downward : Icons.arrow_upward, color: primaryColor),
+                onPressed: () { setState(() { _sortAscending = !_sortAscending; }); },
               ),
             ],
           ),
         ),
 
-        // --- LISTA PRENOTAZIONI ---
+        // --- LA LISTA IN TEMPO REALE ---
         Expanded(
-          child: filteredBookings.isEmpty
-              ? const Center(child: Text("Nessuna prenotazione trovata.", style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: filteredBookings.length,
-            itemBuilder: (context, index) {
-              final b = filteredBookings[index];
-              final isFuture = b.date.isAfter(DateTime.now());
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('bookings').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Center(child: Text("Nessuna prenotazione trovata.", style: TextStyle(color: Colors.grey)));
+              }
 
-              return Card(
-                elevation: isFuture ? 4 : 1, // Meno enfasi sulle passate
-                color: isFuture ? Colors.white : Colors.grey.shade100,
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              // Estrae, filtra per data e reparto in modo sicuro
+              List<Booking> filteredBookings = [];
+              for (var doc in snapshot.data!.docs) {
+                try {
+                  final b = Booking.fromJson(doc.data() as Map<String, dynamic>, doc.id);
+                  if (b.date.isAfter(oggi.subtract(const Duration(days: 1)))) {
+                    if (_showOnicotecnica && b.treatment.type == ServiceType.unghie) {
+                      filteredBookings.add(b);
+                    } else if (!_showOnicotecnica && b.treatment.type != ServiceType.unghie) {
+                      filteredBookings.add(b);
+                    }
+                  }
+                } catch (e) {
+                  // ignora dati malformati
+                }
+              }
+
+              // Ordina
+              filteredBookings.sort((a, b) {
+                return _sortAscending ? a.date.compareTo(b.date) : b.date.compareTo(a.date);
+              });
+
+              if (filteredBookings.isEmpty) {
+                return const Center(child: Text("Nessuna prenotazione per questo filtro.", style: TextStyle(color: Colors.grey)));
+              }
+
+              // Crea la UI
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: filteredBookings.length,
+                itemBuilder: (context, index) {
+                  final b = filteredBookings[index];
+                  final isFuture = b.date.isAfter(DateTime.now());
+
+                  return Card(
+                    elevation: isFuture ? 4 : 1,
+                    color: isFuture ? Colors.white : Colors.grey.shade100,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.calendar_month, color: isFuture ? primaryColor : Colors.grey),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              DateFormat('EEEE d MMMM yyyy - HH:mm', 'it_IT').format(b.date),
-                              style: TextStyle(fontWeight: FontWeight.bold, color: isFuture ? Colors.black : Colors.grey),
-                            ),
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_month, color: isFuture ? primaryColor : Colors.grey),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  DateFormat('EEEE d MMMM yyyy - HH:mm', 'it_IT').format(b.date),
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: isFuture ? Colors.black : Colors.grey),
+                                ),
+                              ),
+                              if(isFuture)
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _deleteBooking(b.id!, b.userName ?? 'questo cliente'),
+                                )
+                            ],
                           ),
-                          if(isFuture)
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteBooking(b),
-                            )
+                          const Divider(),
+                          Row(
+                            children: [
+                              const Icon(Icons.person, size: 16, color: Colors.grey),
+                              const SizedBox(width: 5),
+                              Text(b.userName ?? "Cliente", style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              const Icon(Icons.cut, size: 16, color: Colors.grey),
+                              const SizedBox(width: 5),
+                              Text("${b.treatment.name} (con ${b.collaborator.name})"),
+                            ],
+                          ),
                         ],
                       ),
-                      const Divider(),
-                      Row(
-                        children: [
-                          const Icon(Icons.person, size: 16, color: Colors.grey),
-                          const SizedBox(width: 5),
-                          Text(b.userName ?? "Cliente Sconosciuto", style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          const Icon(Icons.cut, size: 16, color: Colors.grey),
-                          const SizedBox(width: 5),
-                          Text("${b.treatment.name} (con ${b.collaborator.name})"),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -641,7 +636,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
         controller: _tabController,
         children: [
           _buildCollaboratorsTab(),
-          _buildBookingsTab(),
+          _buildBookingsTab(), // ORA USA LO STREAM
           _buildClosuresTab(),
         ],
       ),
